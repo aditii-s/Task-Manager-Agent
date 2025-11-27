@@ -2,15 +2,15 @@ import streamlit as st
 import requests
 from datetime import datetime, date, time, timezone
 
-# Try to import plyer for desktop notifications
+# Try to import plyer for desktop notifications (works only locally)
 try:
     from plyer import notification
     PLYER_AVAILABLE = True
 except ModuleNotFoundError:
     PLYER_AVAILABLE = False  # fallback for Streamlit Cloud
 
+# Update this to your backend URL
 BASE_URL = "https://task-manager-agent.onrender.com"
-
 
 st.set_page_config(page_title="🧠 AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager")
@@ -18,8 +18,13 @@ st.title("🧠 AI Task Manager")
 menu = ["Add Task", "Update Task", "Delete Task", "List Tasks"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-# Function to send notifications
+# -------------------- Notification Function --------------------
 def send_notification(title, message):
+    """
+    Sends a notification.
+    - Desktop popup if plyer is available (local).
+    - Streamlit info message if on cloud.
+    """
     if PLYER_AVAILABLE:
         notification.notify(
             title=title,
@@ -27,7 +32,6 @@ def send_notification(title, message):
             timeout=5
         )
     else:
-        # Fallback for Streamlit Cloud
         st.info(f"🔔 {title}: {message}")
 
 # -------------------- ADD TASK --------------------
