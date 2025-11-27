@@ -9,7 +9,8 @@ try:
 except ModuleNotFoundError:
     PLYER_AVAILABLE = False  # fallback for Streamlit Cloud
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "https://task-manager-agent.onrender.com"
+
 
 st.set_page_config(page_title="🧠 AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager")
