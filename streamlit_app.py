@@ -1,7 +1,13 @@
 import streamlit as st
 import requests
 from datetime import datetime, date, time, timezone
-from plyer import notification  # for desktop notifications
+
+# Try to import plyer for desktop notifications
+try:
+    from plyer import notification
+    PLYER_AVAILABLE = True
+except ModuleNotFoundError:
+    PLYER_AVAILABLE = False  # fallback for Streamlit Cloud
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -10,6 +16,18 @@ st.title("🧠 AI Task Manager")
 
 menu = ["Add Task", "Update Task", "Delete Task", "List Tasks"]
 choice = st.sidebar.selectbox("Menu", menu)
+
+# Function to send notifications
+def send_notification(title, message):
+    if PLYER_AVAILABLE:
+        notification.notify(
+            title=title,
+            message=message,
+            timeout=5
+        )
+    else:
+        # Fallback for Streamlit Cloud
+        st.info(f"🔔 {title}: {message}")
 
 # -------------------- ADD TASK --------------------
 if choice == "Add Task":
@@ -37,6 +55,8 @@ if choice == "Add Task":
         try:
             res = requests.post(f"{BASE_URL}/tasks", json=payload)
             st.success(res.json()["message"])
+            if remind:
+                send_notification(f"Task Added: {title}", f"{description} - Due {due_dt}")
         except Exception as e:
             st.error(f"Error adding task: {e}")
 
@@ -67,6 +87,8 @@ elif choice == "Update Task":
         try:
             res = requests.put(f"{BASE_URL}/tasks/{task_id}", json=payload)
             st.success(res.json()["message"])
+            if new_remind:
+                send_notification(f"Task Updated: {payload['title']}", f"{payload['description']} - Due {payload['due']}")
         except Exception as e:
             st.error(f"Error updating task: {e}")
 
@@ -106,13 +128,8 @@ elif choice == "List Tasks":
                     """,
                     unsafe_allow_html=True
                 )
-                # Desktop notification
+                # Send notifications
                 if t.get("remind"):
-                    notification.notify(
-                        title=f"Task Reminder: {t['title']}",
-                        message=f"{t['description']} - Due {t['due']}",
-                        timeout=5
-                    )
+                    send_notification(f"Task Reminder: {t['title']}", f"{t['description']} - Due {t['due']}")
     except Exception as e:
         st.error(f"Error fetching tasks: {e}")
-
