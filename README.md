@@ -8,6 +8,12 @@ AI-powered Task Manager built with Python & Streamlit — Organizes tasks, sets 
 
 ---
 
+## 🧩 Architecture Diagram
+
+![Architecture Diagram](docs/architecture.png)
+
+---
+
 Features 🚀
 
 - ✅ Add, update, and delete tasks effortlessly
