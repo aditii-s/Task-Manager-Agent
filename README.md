@@ -14,6 +14,21 @@ AI-powered Task Manager built with Python & Streamlit — Organizes tasks, sets 
 
 ---
 
+## 📘 Sequence Diagram
+![Sequence Diagram](docs/Sequence%20Diagram.png)
+
+---
+
+## 🔄 Data Flow Diagram (DFD)
+![Data Flow Diagram](docs/Data%20Flow%20Diagram.png)
+
+---
+
+## 🏗 Deployment Diagram
+![Deployment Diagram](docs/Deployement%20Diagram.png)
+
+---
+
 Features 🚀
 
 - ✅ Add, update, and delete tasks effortlessly
