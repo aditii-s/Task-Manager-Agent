@@ -9,8 +9,8 @@ try:
 except ModuleNotFoundError:
     PLYER_AVAILABLE = False  # fallback for Streamlit Cloud
 
-# Update this to your backend URL
-BASE_URL = "https://task-manager-agent.onrender.com"
+# Backend URL
+BASE_URL = "http://127.0.0.1:8000"  # Use your FastAPI backend URL
 
 st.set_page_config(page_title="🧠 AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager")
@@ -20,35 +20,31 @@ choice = st.sidebar.selectbox("Menu", menu)
 
 # -------------------- Notification Function --------------------
 def send_notification(title, message):
-    """
-    Sends a notification.
-    - Desktop popup if plyer is available (local).
-    - Streamlit info message if on cloud.
-    """
     if PLYER_AVAILABLE:
-        notification.notify(
-            title=title,
-            message=message,
-            timeout=5
-        )
+        notification.notify(title=title, message=message, timeout=5)
     else:
         st.info(f"🔔 {title}: {message}")
 
 # -------------------- ADD TASK --------------------
 if choice == "Add Task":
     st.subheader("Add a New Task")
+
+    email = st.text_input("Your Email (for reminders)")
     title = st.text_input("Task Title")
     description = st.text_area("Description")
     priority = st.selectbox("Priority", ["Low", "Medium", "High"])
     due_date = st.date_input("Due Date", min_value=date.today())
     due_time = st.time_input("Due Time", value=time(12, 0))
-    remind = st.checkbox("Send Reminder? (Desktop & Email)")
-    reminder_minutes = st.selectbox("Remind me before:", [0, 5, 10, 15, 30, 60], index=0)
+
+    remind = st.checkbox("Send Email Reminder?")
+    reminder_minutes = st.selectbox("Remind me before:", [5, 10, 15, 30, 60], index=1)
 
     if st.button("Add Task"):
         due_dt = datetime.combine(due_date, due_time).astimezone(timezone.utc)
+        
         payload = {
             "id": 0,
+            "email": email,
             "title": title,
             "description": description,
             "priority": priority,
@@ -57,50 +53,56 @@ if choice == "Add Task":
             "remind": remind,
             "reminder_time": reminder_minutes
         }
+
         try:
             res = requests.post(f"{BASE_URL}/tasks", json=payload)
             st.success(res.json()["message"])
             if remind:
-                send_notification(f"Task Added: {title}", f"{description} - Due {due_dt}")
+                send_notification("Task Added", f"{title} - Reminder set!")
         except Exception as e:
             st.error(f"Error adding task: {e}")
 
 # -------------------- UPDATE TASK --------------------
 elif choice == "Update Task":
     st.subheader("Update Task")
+
     task_id = st.number_input("Task ID", min_value=1, step=1)
-    new_title = st.text_input("New Title (optional)")
-    new_description = st.text_area("New Description (optional)")
-    new_priority = st.selectbox("New Priority (optional)", ["", "Low", "Medium", "High"])
-    new_status = st.selectbox("Status", ["", "todo", "done"])
-    new_due_date = st.date_input("New Due Date (optional)", value=date.today())
-    new_due_time = st.time_input("New Due Time (optional)", value=time(12, 0))
-    new_remind = st.checkbox("Send Reminder? (Desktop & Email)")
-    new_reminder_minutes = st.selectbox("Remind me before:", [0, 5, 10, 15, 30, 60], index=0)
+    email = st.text_input("Your Email (for reminders)")
+    new_title = st.text_input("New Title")
+    new_description = st.text_area("New Description")
+    new_priority = st.selectbox("New Priority", ["", "Low", "Medium", "High"])
+    new_status = st.selectbox("New Status", ["", "todo", "done"])
+    new_due_date = st.date_input("New Due Date", value=date.today())
+    new_due_time = st.time_input("New Due Time", value=time(12, 0))
+    new_remind = st.checkbox("Enable Email Reminder?")
+    new_reminder_minutes = st.selectbox("Remind me before:", [5, 10, 15, 30, 60], index=1)
 
     if st.button("Update Task"):
         payload = {
             "id": task_id,
-            "title": new_title if new_title else "No Change",
-            "description": new_description if new_description else "No Change",
-            "priority": new_priority if new_priority else "Medium",
+            "email": email,
+            "title": new_title or "No Change",
+            "description": new_description or "No Change",
+            "priority": new_priority or "Medium",
             "due": datetime.combine(new_due_date, new_due_time).astimezone(timezone.utc).isoformat(),
-            "status": new_status if new_status else "todo",
+            "status": new_status or "todo",
             "remind": new_remind,
             "reminder_time": new_reminder_minutes
         }
+
         try:
             res = requests.put(f"{BASE_URL}/tasks/{task_id}", json=payload)
             st.success(res.json()["message"])
             if new_remind:
-                send_notification(f"Task Updated: {payload['title']}", f"{payload['description']} - Due {payload['due']}")
+                send_notification("Task Updated", f"{payload['title']} - Reminder Updated!")
         except Exception as e:
             st.error(f"Error updating task: {e}")
 
 # -------------------- DELETE TASK --------------------
 elif choice == "Delete Task":
     st.subheader("Delete Task")
-    task_id = st.number_input("Task ID to Delete", min_value=1, step=1)
+    task_id = st.number_input("Task ID to Delete", min_value=1)
+
     if st.button("Delete Task"):
         try:
             res = requests.delete(f"{BASE_URL}/tasks/{task_id}")
@@ -111,9 +113,11 @@ elif choice == "Delete Task":
 # -------------------- LIST TASKS --------------------
 elif choice == "List Tasks":
     st.subheader("All Tasks")
+
     try:
         res = requests.get(f"{BASE_URL}/tasks")
         tasks = res.json()
+
         if not tasks:
             st.info("No tasks found.")
         else:
@@ -124,17 +128,15 @@ elif choice == "List Tasks":
                         <b>ID:</b> {t['id']}<br>
                         <b>Title:</b> {t['title']}<br>
                         <b>Description:</b> {t['description']}<br>
-                        <b>Due:</b> {t['due'] if t['due'] else 'N/A'}<br>
+                        <b>Email:</b> {t['email']}<br>
+                        <b>Due:</b> {t['due']}<br>
                         <b>Priority:</b> {t['priority']}<br>
                         <b>Status:</b> {t['status']}<br>
-                        <b>Remind:</b> {"🔔" if t.get('remind') else "No"}<br>
-                        <b>Reminder Time:</b> {t.get('reminder_time', 0)} min before
+                        <b>Remind:</b> {"🔔 Yes" if t['remind'] else "No"}<br>
+                        <b>Reminder Time:</b> {t['reminder_time']} min before
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-                # Send notifications
-                if t.get("remind"):
-                    send_notification(f"Task Reminder: {t['title']}", f"{t['description']} - Due {t['due']}")
     except Exception as e:
         st.error(f"Error fetching tasks: {e}")
