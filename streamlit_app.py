@@ -10,7 +10,8 @@ except ModuleNotFoundError:
     PLYER_AVAILABLE = False  # fallback for Streamlit Cloud
 
 # Backend URL
-BASE_URL = "http://127.0.0.1:8000"  # Use your FastAPI backend URL
+BASE_URL = "https://task-manager-agent-api.onrender.com"
+  # Use your FastAPI backend URL
 
 st.set_page_config(page_title="🧠 AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager")
