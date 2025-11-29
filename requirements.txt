@@ -1,13 +1,8 @@
-fastapi==0.122.0
-uvicorn==0.38.0
-sqlalchemy==2.0.44
-openai==2.8.1
-python-multipart==0.0.20
-pydantic==2.12.5
-langchain==1.1.0
-plyer==2.1.0        # available version, 2.2.0 DOES NOT EXIST
-APScheduler==3.11.1 # valid version
-streamlit==1.29.0
-sendgrid==6.12.5
-python-dotenv==1.2.1
+streamlit
+fastapi
+uvicorn
+pydantic
+apscheduler
+python-dotenv
+sendgrid
 requests

@@ -1,6 +1,10 @@
 import streamlit as st
 import requests
 from datetime import datetime, date, time, timezone
+import streamlit as st
+
+SENDGRID_API_KEY = st.secrets["SENDGRID_API_KEY"]
+FROM_EMAIL = st.secrets["FROM_EMAIL"]
 
 # ------------------ CONFIG ------------------
 BASE_URL = "https://task-manager-agent.onrender.com"  # backend FastAPI URL
