@@ -5,9 +5,9 @@ openai==2.8.1
 python-multipart==0.0.20
 pydantic==2.12.5
 langchain==1.1.0
-streamlit
-plyer
-APScheduler
-python-dotenv
-sendgrid
-
+streamlit==1.29.0
+plyer==2.2.0
+apscheduler==3.10.10
+sendgrid==6.11.0
+python-dotenv==1.0.0
+requests==2.31.0
