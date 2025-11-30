@@ -1,66 +1,54 @@
+# task_db.py
 import sqlite3
 
 DB_NAME = "tasks.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            description TEXT,
-            email TEXT,
-            priority TEXT,
-            due_date TEXT,
-            due_time TEXT,
-            remind_before INTEGER
-        )
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        description TEXT,
+        email TEXT,
+        priority TEXT,
+        due TEXT,
+        reminded INTEGER DEFAULT 0
+    )
     """)
-    
     conn.commit()
     conn.close()
 
-# Initialize DB on import
-init_db()
-
-
-def add_task(title, description, email, priority, due_date, due_time, remind_before):
+def add_task(title, description, email, priority, due):
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO tasks (title, description, email, priority, due_date, due_time, remind_before) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (title, description, email, priority, due_date, due_time, remind_before),
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO tasks (title, description, email, priority, due, reminded) VALUES (?, ?, ?, ?, ?, 0)",
+        (title, description, email, priority, due)
     )
     conn.commit()
     conn.close()
-
 
 def get_all_tasks():
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks")
-    tasks = cursor.fetchall()
+    c = conn.cursor()
+    c.execute("SELECT * FROM tasks")
+    rows = c.fetchall()
     conn.close()
-    return tasks
+    return rows
 
-
-def update_task(task_id, title, description, email, priority, due_date, due_time, remind_before):
+def update_task(task_id, **kwargs):
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute(
-        """UPDATE tasks SET title=?, description=?, email=?, priority=?, 
-           due_date=?, due_time=?, remind_before=? WHERE id=?""",
-        (title, description, email, priority, due_date, due_time, remind_before, task_id)
-    )
+    c = conn.cursor()
+    for key, value in kwargs.items():
+        c.execute(f"UPDATE tasks SET {key}=? WHERE id=?", (value, task_id))
     conn.commit()
     conn.close()
 
-
 def delete_task(task_id):
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    c = conn.cursor()
+    c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
     conn.commit()
     conn.close()
