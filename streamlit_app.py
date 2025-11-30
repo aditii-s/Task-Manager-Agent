@@ -1,143 +1,77 @@
+# streamlit_app.py
 import streamlit as st
-import sqlite3
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
-from datetime import datetime, time
+from datetime import datetime
+from task_db import init_db, add_task, get_all_tasks, update_task, delete_task
+from email_utils import send_email
 
-# ------------------------------------------
-# DATABASE (PERSISTENT STORAGE ON STREAMLIT)
-# ------------------------------------------
-def init_db():
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        description TEXT,
-        email TEXT,
-        priority TEXT,
-        due TEXT
-    )
-    """)
-    conn.commit()
-    conn.close()
-
+# Initialize DB
 init_db()
 
-def add_task(title, description, email, priority, due):
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO tasks (title, description, email, priority, due) VALUES (?, ?, ?, ?, ?)",
-        (title, description, email, priority, due)
-    )
-    conn.commit()
-    conn.close()
+st.set_page_config(page_title="Task Manager", layout="wide")
+st.title("📋 Task Manager")
 
-def get_tasks():
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute("SELECT * FROM tasks")
-    data = c.fetchall()
-    conn.close()
-    return data
-
-def delete_task(task_id):
-    conn = sqlite3.connect("tasks.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
-    conn.commit()
-    conn.close()
-
-
-# ------------------------------------------
-# SENDGRID EMAIL SENDER
-# ------------------------------------------
-SENDGRID_API_KEY = st.secrets["SENDGRID_API_KEY"]
-FROM_EMAIL = st.secrets["FROM_EMAIL"]
-
-def send_email(to_email, subject, content):
-    try:
-        message = Mail(
-            from_email=FROM_EMAIL,
-            to_emails=to_email,
-            subject=subject,
-            html_content=content,
-        )
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        sg.send(message)
-        return True
-    except Exception as e:
-        return False
-
-
-# ------------------------------------------
-# STREAMLIT UI
-# ------------------------------------------
-st.set_page_config(page_title="AI Task Manager", layout="centered")
-st.title("✨ AI Task Manager (With Email Reminders)")
-
-
-page = st.sidebar.selectbox("Navigation", ["➕ Add Task", "📋 Task List"])
-
-
-# ------------------------------------------
-# ADD TASK PAGE
-# ------------------------------------------
-if page == "➕ Add Task":
-    st.header("Add a New Task")
-
-    title = st.text_input("Task Title")
+# ----- Add New Task -----
+st.header("Add New Task")
+with st.form("task_form"):
+    title = st.text_input("Title")
     description = st.text_area("Description")
-    email = st.text_input("Email to send reminder to")
+    email = st.text_input("Email (optional)")
     priority = st.selectbox("Priority", ["Low", "Medium", "High"])
-
     due_date = st.date_input("Due Date")
-    due_time = st.time_input("Due Time", value=time(12, 0))
-    due = str(datetime.combine(due_date, due_time))
-
-    if st.button("Save Task"):
+    due_time = st.time_input("Due Time")
+    submitted = st.form_submit_button("Save Task")
+    
+    if submitted:
+        due = datetime.combine(due_date, due_time).isoformat()
         add_task(title, description, email, priority, due)
         st.success("Task added successfully! 🎉")
+        st.experimental_rerun()
 
+# ----- Automatic Email Reminders -----
+tasks = get_all_tasks()
+now = datetime.now()
+for task in tasks:
+    task_id, title, description, email, priority, due, reminded = task
+    due_dt = datetime.fromisoformat(due)
+    if not reminded and email and now >= due_dt:
+        subject = f"Task Reminder: {title}"
+        content = f"""
+        <p>Hello,</p>
+        <p>This is a reminder for your task:</p>
+        <p><b>{title}</b></p>
+        <p>{description}</p>
+        <p>Priority: {priority}</p>
+        <p>Due: {due}</p>
+        """
+        if send_email(email, subject, content):
+            update_task(task_id, reminded=1)
 
-# ------------------------------------------
-# TASK LIST PAGE
-# ------------------------------------------
+# ----- Show Tasks -----
+st.header("All Tasks")
+tasks = get_all_tasks()
+if tasks:
+    for task in tasks:
+        task_id, title, description, email, priority, due, reminded = task
+        st.subheader(f"{title} ({priority})")
+        st.write(f"📧 **Email:** {email if email else 'N/A'}")
+        st.write(f"⏳ **Due:** {due}")
+        st.write(f"✅ **Reminded:** {'Yes' if reminded else 'No'}")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button(f"Delete {task_id}", key=f"del_{task_id}"):
+                delete_task(task_id)
+                st.success("Deleted!")
+                st.experimental_rerun()
+        with col2:
+            if st.button(f"Mark Reminded {task_id}", key=f"rem_{task_id}"):
+                update_task(task_id, reminded=1)
+                st.success("Marked as reminded")
+                st.experimental_rerun()
+        with col3:
+            if st.button(f"Send Email {task_id}", key=f"email_{task_id}"):
+                if send_email(email, f"Task Reminder: {title}", description):
+                    update_task(task_id, reminded=1)
+                    st.success(f"Email sent to {email}")
 else:
-    st.header("Your Tasks")
-    tasks = get_tasks()
-
-    if not tasks:
-        st.info("No tasks found.")
-    else:
-        for t in tasks:
-            task_id, title, desc, email, priority, due = t
-
-            with st.expander(f"{title} ({priority})"):
-                st.write(f"**Description:** {desc}")
-                st.write(f"📧 **Email:** {email}")
-                st.write(f"⏳ **Due:** {due}")
-
-                col1, col2 = st.columns(2)
-
-                # Send email manually
-                with col1:
-                    if st.button(f"Send Reminder Now → {task_id}"):
-                        sent = send_email(
-                            email,
-                            f"Reminder: {title}",
-                            f"<p>{desc}</p><br><p>⏳ Due: {due}</p>"
-                        )
-                        if sent:
-                            st.success("Reminder email sent! 📩")
-                        else:
-                            st.error("Email failed. Check SendGrid settings.")
-
-                # Delete task
-                with col2:
-                    if st.button(f"Delete → {task_id}"):
-                        delete_task(task_id)
-                        st.success("Task deleted.")
-                        st.experimental_rerun()
+    st.info("No tasks found.")
