@@ -20,7 +20,6 @@ choice = st.sidebar.selectbox("📌 Menu", menu)
 if "tasks" not in st.session_state:
     st.session_state["tasks"] = []
 
-# For safe rerun after update/delete
 if "rerun" not in st.session_state:
     st.session_state["rerun"] = False
 
@@ -68,14 +67,14 @@ def schedule_email(task):
 def delete_task(task_id):
     st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
     st.success(f"🗑 Task {task_id} deleted successfully")
-    st.session_state["rerun"] = True
+    st.session_state["rerun"] = True  # set flag to rerun after loop
 
 def update_task(task_id, updated_task):
     for i, t in enumerate(st.session_state["tasks"]):
         if t["id"] == task_id:
             st.session_state["tasks"][i] = updated_task
             st.success(f"✏️ Task {task_id} updated successfully")
-            st.session_state["rerun"] = True
+            st.session_state["rerun"] = True  # set flag to rerun after loop
             break
 
 # ================= ADD TASK =================
@@ -136,6 +135,7 @@ elif choice == "List Tasks":
                 if st.button(f"Update Task {t['id']}", key=f"upd_{t['id']}"):
                     st.session_state["update_task"] = t
 
+    # Safe rerun after loop
     if st.session_state["rerun"]:
         st.session_state["rerun"] = False
         st.experimental_rerun()
