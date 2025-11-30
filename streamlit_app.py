@@ -56,7 +56,7 @@ def schedule_email(task):
 
     delay = (send_time - now).total_seconds()
     if delay <= 0:
-        # Time passed or immediate email
+        # Immediate email
         subject = f"Reminder: {task['title']}"
         content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
         send_email(task["email"], subject, content)
@@ -69,6 +69,19 @@ def schedule_email(task):
             send_email(task["email"], subject, content)
 
         threading.Thread(target=wait_and_send, daemon=True).start()
+
+def delete_task(task_id):
+    """Delete a task by ID"""
+    st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
+    st.success(f"🗑 Task {task_id} deleted successfully")
+
+def update_task(task_id, updated_task):
+    """Update a task by ID"""
+    for i, t in enumerate(st.session_state["tasks"]):
+        if t["id"] == task_id:
+            st.session_state["tasks"][i] = updated_task
+            st.success(f"✏️ Task {task_id} updated successfully")
+            break
 
 # ================= ADD TASK =================
 if choice == "Add Task":
@@ -102,11 +115,9 @@ if choice == "Add Task":
             }
             st.session_state["tasks"].append(task)
             st.success("🎉 Task Added Successfully")
-
-            # Schedule the email reminder
             schedule_email(task)
 
-# ================= LIST TASKS =================
+# ================= LIST / UPDATE / DELETE TASKS =================
 elif choice == "List Tasks":
     st.subheader("📋 All Tasks")
     tasks = st.session_state["tasks"]
@@ -127,3 +138,43 @@ elif choice == "List Tasks":
                     <b>Reminder Before:</b> {t.get('reminder_time', 0)} min
                 </div>
             """, unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"Delete Task {t['id']}"):
+                    delete_task(t["id"])
+                    st.experimental_rerun()
+            with col2:
+                if st.button(f"Update Task {t['id']}"):
+                    # Pre-fill the form in sidebar for update
+                    st.session_state["update_task"] = t
+                    st.experimental_rerun()
+
+# ================= UPDATE TASK FORM (Sidebar) =================
+if "update_task" in st.session_state:
+    t = st.session_state.pop("update_task")
+    st.sidebar.subheader(f"✏️ Update Task {t['id']}")
+    t_title = st.sidebar.text_input("Task Title", value=t["title"])
+    t_description = st.sidebar.text_area("Description", value=t["description"])
+    t_email = st.sidebar.text_input("Email for Reminder 📩", value=t["email"])
+    t_priority = st.sidebar.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(t["priority"]))
+    t_due_date = st.sidebar.date_input("Due Date", value=datetime.fromisoformat(t["due"]).date())
+    t_due_time = st.sidebar.time_input("Due Time", value=datetime.fromisoformat(t["due"]).time())
+    t_remind = st.sidebar.checkbox("Enable Email Reminder?", value=t["remind"])
+    t_reminder_minutes = st.sidebar.selectbox("Remind Me Before (minutes)", [0, 5, 10, 15, 30, 60], index=[0,5,10,15,30,60].index(t["reminder_time"]))
+
+    if st.sidebar.button("Update Task"):
+        due_dt = datetime.combine(t_due_date, t_due_time).astimezone(timezone.utc)
+        updated_task = {
+            "id": t["id"],
+            "title": t_title,
+            "description": t_description,
+            "email": t_email,
+            "priority": t_priority,
+            "due": due_dt.isoformat(),
+            "remind": t_remind,
+            "reminder_time": t_reminder_minutes
+        }
+        update_task(t["id"], updated_task)
+        schedule_email(updated_task)
+        st.experimental_rerun()
