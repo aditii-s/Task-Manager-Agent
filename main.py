@@ -9,6 +9,15 @@ from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 import os
 
+from fastapi import FastAPI
+# (existing imports...)
+
+app = FastAPI(title="AI Task Manager API")
+
+@app.get("/healthz")
+def health():
+    return {"status": "ok"}
+
 # Load environment variables
 load_dotenv()
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
