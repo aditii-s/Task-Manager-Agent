@@ -20,47 +20,66 @@ menu = ["Add Task", "List Tasks"]
 choice = st.sidebar.selectbox("📌 Menu", menu)
 
 # ================= DATABASE =================
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-c = conn.cursor()
-c.execute("""
-CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    description TEXT,
-    email TEXT,
-    priority TEXT,
-    due TEXT,
-    remind INTEGER,
-    reminder_time INTEGER,
-    remind_sent INTEGER
-)
-""")
-conn.commit()
+def get_connection():
+    return sqlite3.connect(DB_FILE, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+
+def init_db():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        description TEXT,
+        email TEXT,
+        priority TEXT,
+        due TEXT,
+        remind INTEGER,
+        reminder_time INTEGER,
+        remind_sent INTEGER
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # ================= HELPER FUNCTIONS =================
 def save_task_to_db(task):
+    conn = get_connection()
+    c = conn.cursor()
     c.execute("""
         INSERT INTO tasks (title, description, email, priority, due, remind, reminder_time, remind_sent)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (task["title"], task["description"], task["email"], task["priority"],
           task["due"], int(task["remind"]), task["reminder_time"], int(task.get("remind_sent", 0))))
     conn.commit()
+    conn.close()
 
 def update_task_in_db(task_id, task):
+    conn = get_connection()
+    c = conn.cursor()
     c.execute("""
         UPDATE tasks SET title=?, description=?, email=?, priority=?, due=?, remind=?, reminder_time=?, remind_sent=?
         WHERE id=?
     """, (task["title"], task["description"], task["email"], task["priority"],
           task["due"], int(task["remind"]), task["reminder_time"], int(task.get("remind_sent", 0)), task_id))
     conn.commit()
+    conn.close()
 
 def delete_task_from_db(task_id):
+    conn = get_connection()
+    c = conn.cursor()
     c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
     conn.commit()
+    conn.close()
 
 def get_all_tasks():
+    conn = get_connection()
+    c = conn.cursor()
     c.execute("SELECT * FROM tasks ORDER BY due")
     rows = c.fetchall()
+    conn.close()
     tasks = []
     for r in rows:
         tasks.append({
@@ -116,7 +135,6 @@ def start_scheduler():
     scheduler.add_job(process_due_emails, 'interval', minutes=1)
     scheduler.start()
 
-# Start scheduler in a separate thread
 threading.Thread(target=start_scheduler, daemon=True).start()
 
 # ================= ADD TASK =================
@@ -225,4 +243,3 @@ if "update_task" in st.session_state:
         st.success(f"Task {t['id']} updated successfully!")
         st.session_state.pop("update_task")
         st.experimental_rerun()
-
