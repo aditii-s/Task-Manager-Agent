@@ -4,17 +4,18 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 
-# Load .env file
+# Load credentials automatically from .env
 load_dotenv()
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 def send_email(to_email, subject, content):
+    """Send email using SendGrid"""
     if not SENDGRID_API_KEY:
         print("❌ Missing SendGrid credentials.")
         return False
     if not to_email:
-        return False  # skip if email not provided
+        return False
     message = Mail(
         from_email="your_verified_email@example.com",  # verified sender
         to_emails=to_email,
