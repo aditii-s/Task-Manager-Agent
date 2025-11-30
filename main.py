@@ -171,3 +171,12 @@ def delete_task(task_id: int):
             return {"message": f"Task deleted!"}
 
     raise HTTPException(status_code=404, detail="Task not found")
+
+@app.get("/test-email")
+def test_email():
+    result = send_email(
+        to_email="1by22cs009@bmsit.in",
+        subject="Test Email from Task Manager",
+        content="<h2>Hello!</h2><p>Your backend + SendGrid are working 🎉</p>"
+    )
+    return {"sent": result}
