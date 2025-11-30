@@ -20,15 +20,12 @@ choice = st.sidebar.selectbox("📌 Menu", menu)
 if "tasks" not in st.session_state:
     st.session_state["tasks"] = []
 
-if "rerun_flag" not in st.session_state:
-    st.session_state["rerun_flag"] = False
-
 if "email_log" not in st.session_state:
-    st.session_state["email_log"] = []  # Store sent email messages
+    st.session_state["email_log"] = []
 
 # ================= HELPER FUNCTIONS =================
 def send_email(to_email, subject, content, task_id=None):
-    """Send email via SendGrid and log it in session state"""
+    """Send email via SendGrid and log it"""
     if not SENDGRID_API_KEY or not FROM_EMAIL:
         st.warning("⚠ SendGrid API key or sender email missing!")
         return
@@ -52,7 +49,7 @@ def send_email(to_email, subject, content, task_id=None):
         st.error(f"❌ Email failed: {e}")
 
 def schedule_email(task):
-    """Schedule email reminder using a separate thread"""
+    """Schedule email reminder"""
     if not task["remind"] or not task["email"] or task.get("completed", False):
         return
     try:
@@ -62,16 +59,15 @@ def schedule_email(task):
         now = datetime.now(timezone.utc)
         delay = (send_time - now).total_seconds()
         if delay <= 0:
-            # Send immediately
+            # send immediately
             subject = f"Reminder: {task['title']}"
             content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
             send_email(task["email"], subject, content, task_id=task["id"])
         else:
-            # Schedule future
             def wait_and_send():
                 t.sleep(delay)
                 if task.get("completed", False):
-                    return  # Don't send if task marked completed
+                    return
                 subject = f"Reminder: {task['title']}"
                 content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
                 send_email(task["email"], subject, content, task_id=task["id"])
@@ -79,17 +75,21 @@ def schedule_email(task):
     except Exception as e:
         st.error(f"Error scheduling email: {e}")
 
+def add_task(task):
+    st.session_state["tasks"].append(task)
+    st.success("🎉 Task Added Successfully")
+    schedule_email(task)
+
 def delete_task(task_id):
     st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
     st.success(f"🗑 Task {task_id} deleted successfully")
-    st.session_state["rerun_flag"] = True
 
 def update_task(task_id, updated_task):
     for i, t in enumerate(st.session_state["tasks"]):
         if t["id"] == task_id:
             st.session_state["tasks"][i] = updated_task
             st.success(f"✏️ Task {task_id} updated successfully")
-            st.session_state["rerun_flag"] = True
+            schedule_email(updated_task)
             break
 
 def mark_completed(task_id):
@@ -97,7 +97,6 @@ def mark_completed(task_id):
         if t["id"] == task_id:
             t["completed"] = True
             st.success(f"✅ Task {task_id} marked as completed")
-            st.session_state["rerun_flag"] = True
             break
 
 # ================= ADD TASK =================
@@ -128,9 +127,7 @@ if choice == "Add Task":
                 "reminder_time": reminder_minutes,
                 "completed": False
             }
-            st.session_state["tasks"].append(task)
-            st.success("🎉 Task Added Successfully")
-            schedule_email(task)
+            add_task(task)
 
 # ================= LIST TASKS =================
 elif choice == "List Tasks":
@@ -162,11 +159,7 @@ elif choice == "List Tasks":
             with col3:
                 if not t.get("completed", False):
                     if st.button(f"Mark Completed {t['id']}", key=f"done_{t['id']}"):
-                        mark_completed(t["id"])
-
-    if st.session_state["rerun_flag"]:
-        st.session_state["rerun_flag"] = False
-        st.experimental_rerun()
+                        mark_completed(t['id'])
 
 # ================= UPDATE TASK (Sidebar) =================
 if "update_task" in st.session_state:
@@ -175,11 +168,11 @@ if "update_task" in st.session_state:
     t_title = st.sidebar.text_input("Task Title", value=t["title"])
     t_description = st.sidebar.text_area("Description", value=t["description"])
     t_email = st.sidebar.text_input("Email for Reminder 📩", value=t["email"])
-    t_priority = st.sidebar.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(t["priority"]))
+    t_priority = st.sidebar.selectbox("Priority", ["Low", "Medium", "High"], index=["Low","Medium","High"].index(t["priority"]))
     t_due_date = st.sidebar.date_input("Due Date", value=datetime.fromisoformat(t["due"]).date())
     t_due_time = st.sidebar.time_input("Due Time", value=datetime.fromisoformat(t["due"]).time())
     t_remind = st.sidebar.checkbox("Enable Email Reminder?", value=t["remind"])
-    t_reminder_minutes = st.sidebar.selectbox("Remind Me Before (minutes)", [0, 5, 10, 15, 30, 60], index=[0,5,10,15,30,60].index(t["reminder_time"]))
+    t_reminder_minutes = st.sidebar.selectbox("Remind Me Before (minutes)", [0,5,10,15,30,60], index=[0,5,10,15,30,60].index(t["reminder_time"]))
     t_completed = st.sidebar.checkbox("Completed", value=t.get("completed", False))
 
     if st.sidebar.button("Update Task"):
@@ -196,12 +189,9 @@ if "update_task" in st.session_state:
             "completed": t_completed
         }
         update_task(t["id"], updated_task)
-        schedule_email(updated_task)
-        st.experimental_rerun()
 
 # ================= EMAIL LOG =================
 if st.session_state["email_log"]:
     st.sidebar.subheader("📧 Email Reminders Sent")
     for log in st.session_state["email_log"]:
         st.sidebar.write(log)
-
