@@ -2,6 +2,7 @@ import streamlit as st
 from task_db import add_task, get_all_tasks, update_task, delete_task
 from datetime import datetime
 
+
 st.set_page_config(page_title="AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager Dashboard")
 
