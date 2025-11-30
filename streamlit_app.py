@@ -1,15 +1,16 @@
 # streamlit_app.py
 import streamlit as st
 from datetime import datetime, date, time, timedelta, timezone
+import sqlite3
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-import json
-import os
+from apscheduler.schedulers.background import BackgroundScheduler
+import threading
 
 # ================= CONFIG =================
 SENDGRID_API_KEY = st.secrets.get("SENDGRID_API_KEY")
 FROM_EMAIL = st.secrets.get("FROM_EMAIL")
-TASK_FILE = "tasks.json"
+DB_FILE = "tasks.db"
 
 st.set_page_config(page_title="🧠 AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager Dashboard")
@@ -17,21 +18,64 @@ st.title("🧠 AI Task Manager Dashboard")
 menu = ["Add Task", "List Tasks"]
 choice = st.sidebar.selectbox("📌 Menu", menu)
 
-# ================= SESSION STATE =================
-if "tasks" not in st.session_state:
-    if os.path.exists(TASK_FILE):
-        with open(TASK_FILE, "r") as f:
-            st.session_state["tasks"] = json.load(f)
-    else:
-        st.session_state["tasks"] = []
+# ================= DATABASE =================
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+c = conn.cursor()
+c.execute("""
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    description TEXT,
+    email TEXT,
+    priority TEXT,
+    due TEXT,
+    remind INTEGER,
+    reminder_time INTEGER,
+    remind_sent INTEGER
+)
+""")
+conn.commit()
 
 # ================= HELPER FUNCTIONS =================
-def save_tasks():
-    with open(TASK_FILE, "w") as f:
-        json.dump(st.session_state["tasks"], f, indent=4)
+def save_task_to_db(task):
+    c.execute("""
+        INSERT INTO tasks (title, description, email, priority, due, remind, reminder_time, remind_sent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (task["title"], task["description"], task["email"], task["priority"],
+          task["due"], int(task["remind"]), task["reminder_time"], int(task.get("remind_sent", 0))))
+    conn.commit()
+
+def update_task_in_db(task_id, task):
+    c.execute("""
+        UPDATE tasks SET title=?, description=?, email=?, priority=?, due=?, remind=?, reminder_time=?, remind_sent=?
+        WHERE id=?
+    """, (task["title"], task["description"], task["email"], task["priority"],
+          task["due"], int(task["remind"]), task["reminder_time"], int(task.get("remind_sent", 0)), task_id))
+    conn.commit()
+
+def delete_task_from_db(task_id):
+    c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    conn.commit()
+
+def get_all_tasks():
+    c.execute("SELECT * FROM tasks ORDER BY due")
+    rows = c.fetchall()
+    tasks = []
+    for r in rows:
+        tasks.append({
+            "id": r[0],
+            "title": r[1],
+            "description": r[2],
+            "email": r[3],
+            "priority": r[4],
+            "due": r[5],
+            "remind": bool(r[6]),
+            "reminder_time": r[7],
+            "remind_sent": bool(r[8])
+        })
+    return tasks
 
 def send_email(to_email, subject, content):
-    """Send email via SendGrid"""
     if not SENDGRID_API_KEY or not FROM_EMAIL or not to_email:
         return
     try:
@@ -47,11 +91,11 @@ def send_email(to_email, subject, content):
         st.warning(f"Email failed: {e}")
 
 def process_due_emails():
-    """Send email reminders for due tasks"""
     now = datetime.now(timezone.utc)
-    for task in st.session_state["tasks"]:
-        if task.get("remind_sent"):
-            continue  # Skip if email already sent
+    tasks = get_all_tasks()
+    for task in tasks:
+        if task["remind_sent"]:
+            continue
         due_dt = datetime.fromisoformat(task["due"])
         remind_before = timedelta(minutes=task["reminder_time"])
         send_time = due_dt - remind_before
@@ -60,28 +104,16 @@ def process_due_emails():
             content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
             send_email(task["email"], subject, content)
             task["remind_sent"] = True
-    save_tasks()
+            update_task_in_db(task["id"], task)
 
-def add_task(task):
-    task["id"] = max([t["id"] for t in st.session_state["tasks"]], default=0) + 1
-    task["remind_sent"] = False
-    st.session_state["tasks"].append(task)
-    save_tasks()
+# ================= BACKGROUND SCHEDULER =================
+def start_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(process_due_emails, 'interval', minutes=1)
+    scheduler.start()
 
-def update_task(task_id, updated_task):
-    for i, t in enumerate(st.session_state["tasks"]):
-        if t["id"] == task_id:
-            updated_task["remind_sent"] = t.get("remind_sent", False)
-            st.session_state["tasks"][i] = updated_task
-            save_tasks()
-            break
-
-def delete_task(task_id):
-    st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
-    save_tasks()
-
-# ================= EMAIL REMINDERS =================
-process_due_emails()
+# Start scheduler in a separate thread
+threading.Thread(target=start_scheduler, daemon=True).start()
 
 # ================= ADD TASK =================
 if choice == "Add Task":
@@ -107,42 +139,47 @@ if choice == "Add Task":
                 "priority": priority,
                 "due": due_dt.isoformat(),
                 "remind": remind,
-                "reminder_time": reminder_minutes
+                "reminder_time": reminder_minutes,
+                "remind_sent": False
             }
-            add_task(task)
+            save_task_to_db(task)
             st.success("🎉 Task Added Successfully")
+            st.experimental_rerun()
 
 # ================= LIST / UPDATE / DELETE TASKS =================
 elif choice == "List Tasks":
     st.subheader("📋 All Tasks")
-    tasks = sorted(st.session_state["tasks"], key=lambda x: x["due"])
+    tasks = get_all_tasks()
     if not tasks:
         st.info("No tasks available.")
     else:
         for t in tasks:
             st.markdown(f"""
-                ID: {t.get('id', 'N/A')}  
-                Title: {t.get('title', 'N/A')}  
-                Description: {t.get('description', 'N/A')}  
-                Email: {t.get('email', 'N/A')}  
-                Priority: {t.get('priority', 'N/A')}  
-                Due: {t.get('due', 'N/A')}  
-                Reminder: {"Enabled" if t.get('remind', False) else "Off"}  
-                Reminder Before: {t.get('reminder_time', 0)} min  
+                ID: {t['id']}  
+                Title: {t['title']}  
+                Description: {t['description']}  
+                Email: {t['email']}  
+                Priority: {t['priority']}  
+                Due: {t['due']}  
+                Reminder: {"Enabled" if t['remind'] else "Off"}  
+                Reminder Before: {t['reminder_time']} min  
             """)
             col1, col2 = st.columns(2)
             with col1:
                 if st.button(f"Delete Task {t['id']}", key=f"del_{t['id']}"):
-                    delete_task(t["id"])
-                    st.experimental_rerun()
+                    st.session_state["task_to_delete"] = t["id"]
             with col2:
                 if st.button(f"Update Task {t['id']}", key=f"upd_{t['id']}"):
                     st.session_state["update_task"] = t
-                    st.experimental_rerun()
+
+    # Handle deletion safely outside loop
+    if "task_to_delete" in st.session_state:
+        delete_task_from_db(st.session_state.pop("task_to_delete"))
+        st.experimental_rerun()
 
 # ================= UPDATE TASK FORM (Sidebar) =================
 if "update_task" in st.session_state:
-    t = st.session_state.pop("update_task")
+    t = st.session_state["update_task"]
     st.sidebar.subheader(f"✏️ Update Task {t['id']}")
     t_title = st.sidebar.text_input("Task Title", value=t["title"])
     t_description = st.sidebar.text_area("Description", value=t["description"])
@@ -163,9 +200,9 @@ if "update_task" in st.session_state:
             "priority": t_priority,
             "due": due_dt.isoformat(),
             "remind": t_remind,
-            "reminder_time": t_reminder_minutes
+            "reminder_time": t_reminder_minutes,
+            "remind_sent": t["remind_sent"]
         }
-        update_task(t["id"], updated_task)
-        process_due_emails()
+        update_task_in_db(t["id"], updated_task)
+        st.session_state.pop("update_task")
         st.experimental_rerun()
-
