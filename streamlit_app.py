@@ -29,9 +29,10 @@ init_db()
 def add_task(title, description, email, priority, due):
     conn = sqlite3.connect("tasks.db")
     c = conn.cursor()
+    # Insert with 'reminded' default 0
     c.execute(
-        "INSERT INTO tasks (title, description, email, priority, due) VALUES (?, ?, ?, ?, ?)",
-        (title, description, email, priority, due)
+        "INSERT INTO tasks (title, description, email, priority, due, reminded) VALUES (?, ?, ?, ?, ?, ?)",
+        (title, description, email, priority, due, 0)
     )
     conn.commit()
     conn.close()
