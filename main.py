@@ -9,8 +9,13 @@ from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 import os
 
-from fastapi import FastAPI
-# (existing imports...)
+# ==================== INITIAL SETUP =====================
+
+# Load environment variables from Render (.env not required for Render)
+load_dotenv()
+
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+FROM_EMAIL = os.getenv("FROM_EMAIL")
 
 app = FastAPI(title="AI Task Manager API")
 
@@ -18,33 +23,30 @@ app = FastAPI(title="AI Task Manager API")
 def health():
     return {"status": "ok"}
 
-# Load environment variables
-load_dotenv()
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-FROM_EMAIL = os.getenv("FROM_EMAIL")
+# ==================== DATA MODEL =====================
 
-app = FastAPI(title="AI Task Manager API")
-
-# ==================== Task Model =====================
 class Task(BaseModel):
     id: int
     title: str
     description: str
     priority: str
-    email: str                  # Each task has its own email
+    email: str                    # Task-specific email
     due: Optional[str] = None
     status: str = "todo"
     remind: bool = False
-    reminder_time: int = 0      # Minutes before deadline
+    reminder_time: int = 0        # Minutes before deadline
 
 tasks: List[Task] = []
 task_counter = 1
 
-# ==================== SendGrid Email Sender =====================
+# ==================== EMAIL SENDER (FIXED) =====================
+
 def send_email(to_email: str, subject: str, content: str):
-    if not SENDGRID_API_KEY:
-        print("⚠ SendGrid API key missing! Email cannot be sent.")
-        return
+    """Send email using SendGrid."""
+
+    if not SENDGRID_API_KEY or not FROM_EMAIL:
+        print("❌ Missing SENDGRID_API_KEY or FROM_EMAIL. Email not sent.")
+        return False
 
     message = Mail(
         from_email=FROM_EMAIL,
@@ -55,13 +57,17 @@ def send_email(to_email: str, subject: str, content: str):
 
     try:
         sg = SendGridAPIClient(SENDGRID_API_KEY)
-        sg.send(message)
-        print(f"📩 Email sent to {to_email}")
+        response = sg.send(message)
+        print(f"📩 Email sent: {response.status_code} to {to_email}")
+        return True
     except Exception as e:
         print(f"❌ Email failed: {e}")
+        return False
 
-# ==================== Reminder Logic =====================
+# ==================== REMINDER LOGIC =====================
+
 def send_reminder(task_id: int):
+    """Triggered by scheduler when reminder time is reached."""
     for task in tasks:
         if task.id == task_id:
             subject = f"🔔 Reminder: {task.title} is due soon"
@@ -71,25 +77,35 @@ def send_reminder(task_id: int):
             <p><b>Description:</b> {task.description}</p>
             <p><b>Due:</b> {task.due}</p>
             """
+
             send_email(task.email, subject, content)
-            print(f"🔔 Reminder triggered for Task {task_id}")
+            print(f"⏰ Reminder sent for Task {task_id}")
             return
 
-# ==================== Scheduler Setup =====================
+# ==================== SCHEDULER =====================
+
 scheduler = BackgroundScheduler()
 scheduler.start()
 
 def schedule_task_reminder(task: Task):
+    """Schedule reminder for a task if enabled."""
+
     if not task.remind or not task.due:
         return
+
     try:
         due_dt = datetime.fromisoformat(task.due)
-    except Exception as e:
-        print("⚠ Invalid date/time format for task due date")
+    except Exception:
+        print("⚠ Invalid due datetime format. Use: YYYY-MM-DDTHH:MM:SS")
         return
 
     remind_at = due_dt - timedelta(minutes=task.reminder_time)
 
+    # Convert to UTC for safe scheduling
+    if remind_at.tzinfo is None:
+        remind_at = remind_at.replace(tzinfo=timezone.utc)
+
+    # Only schedule if reminder is in future
     if remind_at > datetime.now(timezone.utc):
         scheduler.add_job(
             send_reminder,
@@ -99,41 +115,59 @@ def schedule_task_reminder(task: Task):
             id=f"task_{task.id}_reminder",
             replace_existing=True
         )
-        print(f"⏰ Scheduled reminder for Task {task.id} at {remind_at}")
+        print(f"⏰ Reminder scheduled: Task {task.id} at {remind_at}")
+    else:
+        print("⚠ Reminder time already passed. Not scheduling.")
 
-# ==================== API Routes =====================
+# ==================== API ROUTES =====================
+
 @app.post("/tasks")
 def add_task(task: Task):
     global task_counter
+
     task.id = task_counter
     tasks.append(task)
     task_counter += 1
 
     schedule_task_reminder(task)
-    return {"message": f"Task '{task.title}' added successfully!", "task_id": task.id}
+
+    return {"message": f"Task '{task.title}' added!", "task_id": task.id}
+
 
 @app.get("/tasks")
 def get_tasks():
     return [t.dict() for t in tasks]
 
+
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, updated: Task):
-    for i, t in enumerate(tasks):
-        if t.id == task_id:
+    for index, task in enumerate(tasks):
+        if task.id == task_id:
             updated.id = task_id
-            tasks[i] = updated
-            schedule_task_reminder(updated)
-            return {"message": f"Task '{updated.title}' updated successfully!"}
-    raise HTTPException(status_code=404, detail="Task not found")
+            tasks[index] = updated
 
-@app.delete("/tasks/{task_id}")
-def delete_task(task_id: int):
-    for i, t in enumerate(tasks):
-        if t.id == task_id:
-            tasks.pop(i)
+            # Replace old reminder with new one
             try:
                 scheduler.remove_job(f"task_{task_id}_reminder")
             except:
                 pass
-            return {"message": f"Task '{t.title}' deleted successfully!"}
+
+            schedule_task_reminder(updated)
+
+            return {"message": f"Task '{updated.title}' updated!"}
+
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@app.delete("/tasks/{task_id}")
+def delete_task(task_id: int):
+    for index, task in enumerate(tasks):
+        if task.id == task_id:
+            tasks.pop(index)
+            try:
+                scheduler.remove_job(f"task_{task_id}_reminder")
+            except:
+                pass
+            return {"message": f"Task deleted!"}
+
     raise HTTPException(status_code=404, detail="Task not found")
