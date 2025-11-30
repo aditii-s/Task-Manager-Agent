@@ -146,7 +146,7 @@ if choice == "Add Task":
             st.success("🎉 Task Added Successfully")
             st.experimental_rerun()
 
-# ================= LIST / UPDATE / DELETE TASKS =================
+# ================= LIST / DELETE TASKS =================
 elif choice == "List Tasks":
     st.subheader("📋 All Tasks")
     tasks = get_all_tasks()
@@ -181,16 +181,26 @@ elif choice == "List Tasks":
 if "update_task" in st.session_state:
     t = st.session_state["update_task"]
     st.sidebar.subheader(f"✏️ Update Task {t['id']}")
-    t_title = st.sidebar.text_input("Task Title", value=t["title"])
-    t_description = st.sidebar.text_area("Description", value=t["description"])
-    t_email = st.sidebar.text_input("Email for Reminder 📩", value=t["email"])
-    t_priority = st.sidebar.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(t["priority"]))
-    t_due_date = st.sidebar.date_input("Due Date", value=datetime.fromisoformat(t["due"]).date())
-    t_due_time = st.sidebar.time_input("Due Time", value=datetime.fromisoformat(t["due"]).time())
-    t_remind = st.sidebar.checkbox("Enable Email Reminder?", value=t["remind"])
-    t_reminder_minutes = st.sidebar.selectbox("Remind Me Before (minutes)", [0, 5, 10, 15, 30, 60], index=[0,5,10,15,30,60].index(t["reminder_time"]))
 
-    if st.sidebar.button("Update Task"):
+    t_title = st.sidebar.text_input("Task Title", value=t["title"], key=f"title_{t['id']}")
+    t_description = st.sidebar.text_area("Description", value=t["description"], key=f"description_{t['id']}")
+    t_email = st.sidebar.text_input("Email for Reminder 📩", value=t["email"], key=f"email_{t['id']}")
+    t_priority = st.sidebar.selectbox(
+        "Priority", ["Low", "Medium", "High"], 
+        index=["Low", "Medium", "High"].index(t["priority"]),
+        key=f"priority_{t['id']}"
+    )
+    t_due_date = st.sidebar.date_input("Due Date", value=datetime.fromisoformat(t["due"]).date(), key=f"duedate_{t['id']}")
+    t_due_time = st.sidebar.time_input("Due Time", value=datetime.fromisoformat(t["due"]).time(), key=f"duetime_{t['id']}")
+    t_remind = st.sidebar.checkbox("Enable Email Reminder?", value=t["remind"], key=f"remind_{t['id']}")
+    t_reminder_minutes = st.sidebar.selectbox(
+        "Remind Me Before (minutes)", 
+        [0, 5, 10, 15, 30, 60], 
+        index=[0,5,10,15,30,60].index(t["reminder_time"]), 
+        key=f"remindtime_{t['id']}"
+    )
+
+    if st.sidebar.button("Update Task", key=f"updatebtn_{t['id']}"):
         due_dt = datetime.combine(t_due_date, t_due_time).astimezone(timezone.utc)
         updated_task = {
             "id": t["id"],
@@ -204,5 +214,7 @@ if "update_task" in st.session_state:
             "remind_sent": t["remind_sent"]
         }
         update_task_in_db(t["id"], updated_task)
+        st.success(f"Task {t['id']} updated successfully!")
         st.session_state.pop("update_task")
         st.experimental_rerun()
+
