@@ -8,6 +8,14 @@ from datetime import datetime
 init_db()
 
 # ----------------------------
+# Session state for refresh and editing
+# ----------------------------
+if "editing_task" not in st.session_state:
+    st.session_state.editing_task = None
+if "refresh_trigger" not in st.session_state:
+    st.session_state.refresh_trigger = 0
+
+# ----------------------------
 # Sidebar page selector
 # ----------------------------
 page = st.sidebar.selectbox("Navigate", ["Add Task", "All Tasks"])
@@ -31,6 +39,7 @@ if page == "Add Task":
         if submitted:
             add_task(title, description, email, priority, due)
             st.success("Task added successfully!")
+            st.session_state.refresh_trigger += 1
 
 # ----------------------------
 # All Tasks Page
@@ -58,23 +67,24 @@ elif page == "All Tasks":
                 with col1:
                     if st.button("Mark as Reminded", key=f"remind_{task_id}"):
                         update_task(task_id, reminded=1)
-                        st.experimental_rerun()
+                        st.session_state.refresh_trigger += 1
 
                 # Delete task
                 with col2:
                     if st.button("Delete Task", key=f"delete_{task_id}"):
                         delete_task(task_id)
-                        st.experimental_rerun()
+                        st.session_state.refresh_trigger += 1
 
                 # Edit task
                 with col3:
                     if st.button("Edit Task", key=f"edit_{task_id}"):
                         st.session_state.editing_task = task_id
+                        st.session_state.refresh_trigger += 1
 
         # ----------------------------
         # Editing Task Form
         # ----------------------------
-        if "editing_task" in st.session_state:
+        if st.session_state.editing_task is not None:
             edit_id = st.session_state.editing_task
             edit_task = next(t for t in tasks if t[0] == edit_id)
             _, e_title, e_description, e_email, e_priority, e_due, e_reminded = edit_task
@@ -86,7 +96,10 @@ elif page == "All Tasks":
                 new_title = st.text_input("Title", e_title)
                 new_description = st.text_area("Description", e_description)
                 new_email = st.text_input("Email", e_email)
-                new_priority = st.selectbox("Priority", ["Low", "Medium", "High"], index=["Low","Medium","High"].index(e_priority))
+                new_priority = st.selectbox(
+                    "Priority", ["Low", "Medium", "High"], 
+                    index=["Low", "Medium", "High"].index(e_priority)
+                )
                 new_due_datetime = datetime.fromisoformat(e_due)
                 new_due_date = st.date_input("Due Date", new_due_datetime.date())
                 new_due_time = st.time_input("Due Time", new_due_datetime.time())
@@ -103,6 +116,14 @@ elif page == "All Tasks":
                         due=new_due
                     )
                     st.success("Task updated successfully!")
-                    del st.session_state.editing_task
-                    st.experimental_rerun()
+                    st.session_state.editing_task = None
+                    st.session_state.refresh_trigger += 1
 
+# ----------------------------
+# Rerun simulation for Streamlit <=1.51
+# ----------------------------
+if st.session_state.refresh_trigger > 0:
+    st.session_state.refresh_trigger = 0
+    st.experimental_rerun = lambda: st._rerun() if hasattr(st, "_rerun") else None
+    if hasattr(st, "_rerun"):
+        st._rerun()
