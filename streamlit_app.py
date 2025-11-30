@@ -20,17 +20,18 @@ choice = st.sidebar.selectbox("📌 Menu", menu)
 if "tasks" not in st.session_state:
     st.session_state["tasks"] = []
 
+# For safe rerun after update/delete
+if "rerun" not in st.session_state:
+    st.session_state["rerun"] = False
+
 # ================= HELPER FUNCTIONS =================
 def send_email(to_email, subject, content):
-    """Send email via SendGrid"""
     if not SENDGRID_API_KEY or not FROM_EMAIL:
         st.warning("⚠ SendGrid API key or sender email missing!")
         return
-
     if not to_email:
         st.warning("⚠ Task has no recipient email!")
         return
-
     try:
         message = Mail(
             from_email=FROM_EMAIL,
@@ -45,15 +46,12 @@ def send_email(to_email, subject, content):
         st.error(f"❌ Email failed: {e}")
 
 def schedule_email(task):
-    """Schedule email reminder using a separate thread"""
     if not task["remind"] or not task["email"]:
         return
-
     due_dt = datetime.fromisoformat(task["due"])
     remind_before = timedelta(minutes=task["reminder_time"])
     send_time = due_dt - remind_before
     now = datetime.now(timezone.utc)
-
     delay = (send_time - now).total_seconds()
     if delay <= 0:
         subject = f"Reminder: {task['title']}"
@@ -65,32 +63,30 @@ def schedule_email(task):
             subject = f"Reminder: {task['title']}"
             content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
             send_email(task["email"], subject, content)
-
         threading.Thread(target=wait_and_send, daemon=True).start()
 
 def delete_task(task_id):
     st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
     st.success(f"🗑 Task {task_id} deleted successfully")
+    st.session_state["rerun"] = True
 
 def update_task(task_id, updated_task):
     for i, t in enumerate(st.session_state["tasks"]):
         if t["id"] == task_id:
             st.session_state["tasks"][i] = updated_task
             st.success(f"✏️ Task {task_id} updated successfully")
+            st.session_state["rerun"] = True
             break
 
 # ================= ADD TASK =================
 if choice == "Add Task":
     st.subheader("➕ Add New Task")
-
     title = st.text_input("Task Title")
     description = st.text_area("Description")
     email = st.text_input("Email for Reminder 📩")
     priority = st.selectbox("Priority", ["Low", "Medium", "High"])
-
     due_date = st.date_input("Due Date", min_value=date.today())
     due_time = st.time_input("Due Time", value=time(12,0))
-
     remind = st.checkbox("Enable Email Reminder?")
     reminder_minutes = st.selectbox("Remind Me Before (minutes)", [0, 5, 10, 15, 30, 60])
 
@@ -117,36 +113,32 @@ if choice == "Add Task":
 elif choice == "List Tasks":
     st.subheader("📋 All Tasks")
     tasks = st.session_state["tasks"]
-    
-    # Sort tasks by due date
     tasks_sorted = sorted(tasks, key=lambda x: x["due"])
 
     if not tasks_sorted:
         st.info("No tasks available.")
     else:
         for t in tasks_sorted:
-            st.markdown(f"""
-                <div style="border:1px solid #555; padding:12px; border-radius:10px; margin-bottom:10px; background:#f9f9f9;">
-                    <b>ID:</b> {t.get('id', 'N/A')}<br>
-                    <b>Title:</b> {t.get('title', 'N/A')}<br>
-                    <b>Description:</b> {t.get('description', 'N/A')}<br>
-                    <b>Email:</b> {t.get('email', 'N/A')}<br>
-                    <b>Priority:</b> {t.get('priority', 'N/A')}<br>
-                    <b>Due:</b> {t.get('due', 'N/A')}<br>
-                    <b>Reminder:</b> {"Enabled" if t.get('remind', False) else "Off"}<br>
-                    <b>Reminder Before:</b> {t.get('reminder_time', 0)} min
-                </div>
-            """, unsafe_allow_html=True)
+            st.write(f"ID: {t.get('id', 'N/A')}")
+            st.write(f"Title: {t.get('title', 'N/A')}")
+            st.write(f"Description: {t.get('description', 'N/A')}")
+            st.write(f"Email: {t.get('email', 'N/A')}")
+            st.write(f"Priority: {t.get('priority', 'N/A')}")
+            st.write(f"Due: {t.get('due', 'N/A')}")
+            st.write(f"Reminder: {'Enabled' if t.get('remind', False) else 'Off'}")
+            st.write(f"Reminder Before: {t.get('reminder_time', 0)} min")
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button(f"Delete Task {t['id']}", key=f"del_{t['id']}"):
                     delete_task(t["id"])
-                    st.experimental_rerun()
             with col2:
                 if st.button(f"Update Task {t['id']}", key=f"upd_{t['id']}"):
                     st.session_state["update_task"] = t
-                    st.experimental_rerun()
+
+    if st.session_state["rerun"]:
+        st.session_state["rerun"] = False
+        st.experimental_rerun()
 
 # ================= UPDATE TASK FORM (Sidebar) =================
 if "update_task" in st.session_state:
