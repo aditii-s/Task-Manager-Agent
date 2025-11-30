@@ -56,12 +56,10 @@ def schedule_email(task):
 
     delay = (send_time - now).total_seconds()
     if delay <= 0:
-        # Immediate email
         subject = f"Reminder: {task['title']}"
         content = f"<b>Task:</b> {task['title']}<br><b>Description:</b> {task['description']}<br><b>Due:</b> {task['due']}"
         send_email(task["email"], subject, content)
     else:
-        # Schedule future email
         def wait_and_send():
             t.sleep(delay)
             subject = f"Reminder: {task['title']}"
@@ -71,17 +69,23 @@ def schedule_email(task):
         threading.Thread(target=wait_and_send, daemon=True).start()
 
 def delete_task(task_id):
-    """Delete a task by ID"""
     st.session_state["tasks"] = [t for t in st.session_state["tasks"] if t["id"] != task_id]
     st.success(f"🗑 Task {task_id} deleted successfully")
 
 def update_task(task_id, updated_task):
-    """Update a task by ID"""
     for i, t in enumerate(st.session_state["tasks"]):
         if t["id"] == task_id:
             st.session_state["tasks"][i] = updated_task
             st.success(f"✏️ Task {task_id} updated successfully")
             break
+
+def get_priority_color(priority):
+    if priority == "High":
+        return "#ff4d4d"
+    elif priority == "Medium":
+        return "#ffa500"
+    else:
+        return "#4CAF50"
 
 # ================= ADD TASK =================
 if choice == "Add Task":
@@ -121,18 +125,22 @@ if choice == "Add Task":
 elif choice == "List Tasks":
     st.subheader("📋 All Tasks")
     tasks = st.session_state["tasks"]
+    
+    # Sort tasks by due date
+    tasks_sorted = sorted(tasks, key=lambda x: x["due"])
 
-    if not tasks:
+    if not tasks_sorted:
         st.info("No tasks available.")
     else:
-        for t in tasks:
+        for t in tasks_sorted:
+            color = get_priority_color(t["priority"])
             st.markdown(f"""
-                <div style="border:1px solid #555; padding:12px; border-radius:10px; margin-bottom:10px;">
+                <div style="border:1px solid #555; padding:12px; border-radius:10px; margin-bottom:10px; background:#f9f9f9;">
                     <b>ID:</b> {t.get('id', 'N/A')}<br>
-                    <b>Title:</b> {t.get('title', 'N/A')}<br>
+                    <b>Title:</b> <span style="color:{color}; font-weight:bold;">{t.get('title', 'N/A')}</span><br>
                     <b>Description:</b> {t.get('description', 'N/A')}<br>
                     <b>Email:</b> {t.get('email', 'N/A')}<br>
-                    <b>Priority:</b> {t.get('priority', 'N/A')}<br>
+                    <b>Priority:</b> <span style="color:{color};">{t.get('priority', 'N/A')}</span><br>
                     <b>Due:</b> {t.get('due', 'N/A')}<br>
                     <b>Reminder:</b> {"Enabled" if t.get('remind', False) else "Off"}<br>
                     <b>Reminder Before:</b> {t.get('reminder_time', 0)} min
@@ -141,12 +149,11 @@ elif choice == "List Tasks":
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button(f"Delete Task {t['id']}"):
+                if st.button(f"Delete Task {t['id']}", key=f"del_{t['id']}"):
                     delete_task(t["id"])
                     st.experimental_rerun()
             with col2:
-                if st.button(f"Update Task {t['id']}"):
-                    # Pre-fill the form in sidebar for update
+                if st.button(f"Update Task {t['id']}", key=f"upd_{t['id']}"):
                     st.session_state["update_task"] = t
                     st.experimental_rerun()
 
