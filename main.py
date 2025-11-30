@@ -33,6 +33,7 @@ class Task(BaseModel):
 tasks: List[Task] = []
 task_counter = 1
 
+
 def send_email(to_email: str, subject: str, content: str):
     if not SENDGRID_API_KEY or not FROM_EMAIL:
         print("❌ Missing SendGrid credentials.")
@@ -46,10 +47,12 @@ def send_email(to_email: str, subject: str, content: str):
     try:
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         sg.send(message)
+        print("Email sent to", to_email)
         return True
     except Exception as e:
         print("Email failed:", e)
         return False
+
 
 def send_reminder(task_id: int):
     for task in tasks:
@@ -59,15 +62,19 @@ def send_reminder(task_id: int):
             send_email(task.email, subject, content)
             return
 
+
 scheduler = BackgroundScheduler()
 scheduler.start()
+
 
 def schedule_task_reminder(task: Task):
     if not task.remind or not task.due:
         return
+
     due_dt = datetime.fromisoformat(task.due)
     remind_at = due_dt - timedelta(minutes=task.reminder_time)
     remind_at = remind_at.replace(tzinfo=timezone.utc)
+
     if remind_at > datetime.now(timezone.utc):
         scheduler.add_job(
             send_reminder,
@@ -78,6 +85,7 @@ def schedule_task_reminder(task: Task):
             replace_existing=True
         )
 
+
 @app.post("/tasks")
 def add_task(task: Task):
     global task_counter
@@ -87,9 +95,11 @@ def add_task(task: Task):
     schedule_task_reminder(task)
     return {"message": "Task added!", "task_id": task.id}
 
+
 @app.get("/tasks")
 def get_tasks():
     return [t.dict() for t in tasks]
+
 
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, updated: Task):
@@ -97,13 +107,17 @@ def update_task(task_id: int, updated: Task):
         if task.id == task_id:
             updated.id = task_id
             tasks[i] = updated
+
             try:
                 scheduler.remove_job(f"task_{task_id}_reminder")
             except:
                 pass
+
             schedule_task_reminder(updated)
             return {"message": "Task updated!"}
+
     raise HTTPException(404, "Task not found")
+
 
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int):
@@ -115,4 +129,6 @@ def delete_task(task_id: int):
             except:
                 pass
             return {"message": "Task deleted!"}
+
     raise HTTPException(404, "Task not found")
+

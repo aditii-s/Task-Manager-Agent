@@ -1,68 +1,76 @@
 import streamlit as st
-from task_db import add_task, get_all_tasks, update_task, delete_task
-from datetime import datetime
+import requests
+from datetime import datetime, date, time
 
+BASE_URL = "https://task-manager-agent.onrender.com"   # your backend
 
 st.set_page_config(page_title="AI Task Manager", layout="centered")
 st.title("🧠 AI Task Manager Dashboard")
 
-# Sidebar for navigation
 page = st.sidebar.selectbox("Choose Page", ["Add Task", "Task List"])
 
-# -------------------- Add Task Page --------------------
+# --------------- Add Task Page ---------------
 if page == "Add Task":
     st.header("➕ Add New Task")
+
     title = st.text_input("Task Title")
     description = st.text_area("Description")
-    email = st.text_input("Email for Reminder 📩")
+    email = st.text_input("Reminder Email 📩")
     priority = st.selectbox("Priority", ["Low", "Medium", "High"])
-    due_date = st.date_input("Due Date")
-    due_time = st.time_input("Due Time")
-    remind_before = st.number_input("Remind Me Before (minutes)", min_value=0, value=15)
+
+    due_date = st.date_input("Due Date", value=date.today())
+    due_time = st.time_input("Due Time", value=time(12, 0))
+
+    remind = st.checkbox("Enable Reminder")
+    reminder_minutes = st.number_input("Remind Before (minutes)", min_value=0, value=15)
 
     if st.button("Add Task"):
-        add_task(title, description, email, priority, str(due_date), str(due_time), remind_before)
-        st.success("🎉 Task Added Successfully")
+        due_str = datetime.combine(due_date, due_time).isoformat()
 
-# -------------------- Task List Page --------------------
+        payload = {
+            "id": 0,
+            "title": title,
+            "description": description,
+            "email": email,
+            "priority": priority,
+            "due": due_str,
+            "status": "todo",
+            "remind": remind,
+            "reminder_time": reminder_minutes
+        }
+
+        r = requests.post(f"{BASE_URL}/tasks", json=payload)
+
+        if r.status_code == 200:
+            st.success("🎉 Task added successfully!")
+        else:
+            st.error("Failed to add task.")
+
+# --------------- Task List Page ---------------
 elif page == "Task List":
-    st.header("📋 All Tasks")
-    tasks = get_all_tasks()
+    st.header("📋 Your Tasks")
 
-    if not tasks:
-        st.info("No tasks found. Add a task first!")
+    r = requests.get(f"{BASE_URL}/tasks")
+
+    if r.status_code != 200:
+        st.error("Failed to load tasks.")
     else:
-        for task in tasks:
-            task_id, title, description, email, priority, due_date, due_time, remind_before = task
+        tasks = r.json()
 
-            with st.expander(f"{title} ({priority})"):
-                st.write(f"**Description:** {description}")
-                st.write(f"**Email:** {email}")
-                st.write(f"**Due:** {due_date} {due_time}")
-                st.write(f"**Remind Before:** {remind_before} min")
+        if not tasks:
+            st.info("No tasks yet.")
+        else:
+            for task in tasks:
+                with st.expander(task["title"]):
+                    st.write(f"📧 **Email:** {task['email']}")
+                    st.write(f"⏳ **Due:** {task['due']}")
+                    st.write(f"⚡ **Priority:** {task['priority']}")
+                    st.write(f"🔔 **Reminder:** {'Yes' if task['remind'] else 'No'}")
 
-                # Columns for Update / Delete
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(f"Update {task_id}"):
-                        # Prefill form for update
-                        new_title = st.text_input("New Title", value=title, key=f"title_{task_id}")
-                        new_desc = st.text_area("New Description", value=description, key=f"desc_{task_id}")
-                        new_email = st.text_input("New Email", value=email, key=f"email_{task_id}")
-                        new_priority = st.selectbox("New Priority", ["Low", "Medium", "High"], index=["Low","Medium","High"].index(priority), key=f"priority_{task_id}")
-                        new_due_date = st.date_input("New Due Date", value=datetime.strptime(due_date, "%Y-%m-%d").date(), key=f"date_{task_id}")
-                        new_due_time = st.time_input("New Due Time", value=datetime.strptime(due_time, "%H:%M:%S").time(), key=f"time_{task_id}")
-                        new_remind_before = st.number_input("New Remind Before", value=remind_before, key=f"remind_{task_id}")
+                    col1, col2 = st.columns(2)
 
-                        if st.button("Save", key=f"save_{task_id}"):
-                            update_task(task_id, new_title, new_desc, new_email, new_priority,
-                                        str(new_due_date), str(new_due_time), new_remind_before)
-                            st.success("✅ Task Updated Successfully")
+                    with col2:
+                        if st.button(f"Delete {task['id']}"):
+                            requests.delete(f"{BASE_URL}/tasks/{task['id']}")
+                            st.success("Deleted!")
                             st.experimental_rerun()
-
-                with col2:
-                    if st.button(f"Delete {task_id}"):
-                        delete_task(task_id)
-                        st.success("❌ Task Deleted Successfully")
-                        st.experimental_rerun()
-

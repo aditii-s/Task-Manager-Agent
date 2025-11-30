@@ -1,8 +1,8 @@
 streamlit
 fastapi
+numpy
 uvicorn
 pandas
-numpy
 pydantic
 apscheduler
 python-dotenv
