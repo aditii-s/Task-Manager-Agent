@@ -6,6 +6,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
+from dateutil import parser
 
 # ================= CONFIG =================
 SENDGRID_API_KEY = st.secrets.get("SENDGRID_API_KEY")
@@ -96,7 +97,10 @@ def process_due_emails():
     for task in tasks:
         if task["remind_sent"]:
             continue
-        due_dt = datetime.fromisoformat(task["due"])
+        try:
+            due_dt = parser.isoparse(task["due"])
+        except Exception:
+            due_dt = datetime.now(timezone.utc)
         remind_before = timedelta(minutes=task["reminder_time"])
         send_time = due_dt - remind_before
         if now >= send_time and task["remind"]:
@@ -172,7 +176,6 @@ elif choice == "List Tasks":
                 if st.button(f"Update Task {t['id']}", key=f"upd_{t['id']}"):
                     st.session_state["update_task"] = t
 
-    # Handle deletion safely outside loop
     if "task_to_delete" in st.session_state:
         delete_task_from_db(st.session_state.pop("task_to_delete"))
         st.experimental_rerun()
@@ -182,6 +185,11 @@ if "update_task" in st.session_state:
     t = st.session_state["update_task"]
     st.sidebar.subheader(f"✏️ Update Task {t['id']}")
 
+    try:
+        due_dt = parser.isoparse(t["due"])
+    except Exception:
+        due_dt = datetime.now(timezone.utc)
+
     t_title = st.sidebar.text_input("Task Title", value=t["title"], key=f"title_{t['id']}")
     t_description = st.sidebar.text_area("Description", value=t["description"], key=f"description_{t['id']}")
     t_email = st.sidebar.text_input("Email for Reminder 📩", value=t["email"], key=f"email_{t['id']}")
@@ -190,8 +198,8 @@ if "update_task" in st.session_state:
         index=["Low", "Medium", "High"].index(t["priority"]),
         key=f"priority_{t['id']}"
     )
-    t_due_date = st.sidebar.date_input("Due Date", value=datetime.fromisoformat(t["due"]).date(), key=f"duedate_{t['id']}")
-    t_due_time = st.sidebar.time_input("Due Time", value=datetime.fromisoformat(t["due"]).time(), key=f"duetime_{t['id']}")
+    t_due_date = st.sidebar.date_input("Due Date", value=due_dt.date(), key=f"duedate_{t['id']}")
+    t_due_time = st.sidebar.time_input("Due Time", value=due_dt.time(), key=f"duetime_{t['id']}")
     t_remind = st.sidebar.checkbox("Enable Email Reminder?", value=t["remind"], key=f"remind_{t['id']}")
     t_reminder_minutes = st.sidebar.selectbox(
         "Remind Me Before (minutes)", 
@@ -201,14 +209,14 @@ if "update_task" in st.session_state:
     )
 
     if st.sidebar.button("Update Task", key=f"updatebtn_{t['id']}"):
-        due_dt = datetime.combine(t_due_date, t_due_time).astimezone(timezone.utc)
+        due_dt_combined = datetime.combine(t_due_date, t_due_time).astimezone(timezone.utc)
         updated_task = {
             "id": t["id"],
             "title": t_title,
             "description": t_description,
             "email": t_email,
             "priority": t_priority,
-            "due": due_dt.isoformat(),
+            "due": due_dt_combined.isoformat(),
             "remind": t_remind,
             "reminder_time": t_reminder_minutes,
             "remind_sent": t["remind_sent"]
