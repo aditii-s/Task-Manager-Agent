@@ -79,14 +79,6 @@ def update_task(task_id, updated_task):
             st.success(f"✏️ Task {task_id} updated successfully")
             break
 
-def get_priority_color(priority):
-    if priority == "High":
-        return "#ff4d4d"
-    elif priority == "Medium":
-        return "#ffa500"
-    else:
-        return "#4CAF50"
-
 # ================= ADD TASK =================
 if choice == "Add Task":
     st.subheader("➕ Add New Task")
@@ -133,14 +125,13 @@ elif choice == "List Tasks":
         st.info("No tasks available.")
     else:
         for t in tasks_sorted:
-            color = get_priority_color(t["priority"])
             st.markdown(f"""
                 <div style="border:1px solid #555; padding:12px; border-radius:10px; margin-bottom:10px; background:#f9f9f9;">
                     <b>ID:</b> {t.get('id', 'N/A')}<br>
-                    <b>Title:</b> <span style="color:{color}; font-weight:bold;">{t.get('title', 'N/A')}</span><br>
+                    <b>Title:</b> {t.get('title', 'N/A')}<br>
                     <b>Description:</b> {t.get('description', 'N/A')}<br>
                     <b>Email:</b> {t.get('email', 'N/A')}<br>
-                    <b>Priority:</b> <span style="color:{color};">{t.get('priority', 'N/A')}</span><br>
+                    <b>Priority:</b> {t.get('priority', 'N/A')}<br>
                     <b>Due:</b> {t.get('due', 'N/A')}<br>
                     <b>Reminder:</b> {"Enabled" if t.get('remind', False) else "Off"}<br>
                     <b>Reminder Before:</b> {t.get('reminder_time', 0)} min
